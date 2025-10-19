@@ -1,0 +1,31 @@
+# Pliki tymczasowe Pythona
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Pliki środowiskowe
+.env
+*.log
+
+# Modele ML
+*.pkl
+*.joblib
+
+# Pliki danych
+*.csv
+*.tsv
+*.xlsx
+
+# Streamlit
+.streamlit/
+
+# Systemowe
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
