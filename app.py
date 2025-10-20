@@ -1,14 +1,39 @@
-import streamlit as st
-import joblib
+# import streamlit as st
+# import joblib
 import openai
 import json
 import os
+
+import boto3
+import joblib
+import io
+import streamlit as st
+
+@st.cache_resource
+def load_model_from_spaces():
+    client = boto3.client(
+        's3',
+        region_name='fra1',  # lub inna Twoja lokalizacja
+        endpoint_url='https://fra1.digitaloceanspaces.com',
+        aws_access_key_id=st.secrets["DO_SPACES_KEY"],
+        aws_secret_access_key=st.secrets["DO_SPACES_SECRET"]
+    )
+
+    obj = client.get_object(Bucket='9-mod-1-zad', Key='model_halfmaraton.pkl')
+    model_bytes = obj['Body'].read()
+    model = joblib.load(io.BytesIO(model_bytes))
+    return model
+
+# model = load_model_from_spaces()
+
 
 # 🔐 Klucz API OpenAI (można ustawić jako zmienną środowiskową)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # 📦 Wczytanie modelu
-model = joblib.load("model_halfmaraton.pkl")
+# model = joblib.load("model_halfmaraton.pkl")
+model = load_model_from_spaces()
+st.success("✅ Model został poprawnie pobrany z DigitalOcean Spaces!")
 
 # 🧠 Funkcja do ekstrakcji danych z tekstu
 def extract_features_from_text(text):
