@@ -1,5 +1,5 @@
+# 📦 Importy
 import os
-import uuid
 import json
 import re
 import pandas as pd
@@ -7,18 +7,36 @@ import streamlit as st
 from pycaret.regression import load_model, predict_model
 from openai import OpenAI
 from dotenv import load_dotenv
+import requests
+from langfuse import Langfuse
+langfuse = Langfuse()
 
-st.set_page_config(page_title="ZAPLANUJ SWÓJ MARATON", layout="centered",)
+# 🌍 Załaduj zmienne środowiskowe
+# load_dotenv()
 
-# Konfiguracja środowiska i modeli
-load_dotenv()
+# 🔍 Inicjalizacja Langfuse
+# langfuse = Langfuse()
+
+# 📥 Pobierz model z DigitalOcean Spaces
+url = "https://9-mod-1-zad.fra1.digitaloceanspaces.com/model_halfmaraton.pkl"
+response = requests.get(url)
+if response.status_code == 200:
+    with open("model_halfmaraton.pkl", "wb") as f:
+        f.write(response.content)
+else:
+    raise Exception(f"Nie udało się pobrać modelu: {response.status_code}")
+
+# 📦 Załaduj model
 model = load_model("model_halfmaraton")
 
-# Ustawienie session state
+# 🖥️ Konfiguracja Streamlit
+st.set_page_config(page_title="ZAPLANUJ SWÓJ MARATON", layout="centered")
+
+# 🔐 API Key
 if "api_key" not in st.session_state:
     st.session_state.api_key = ""
 
-# Funkcje pomocnicze
+# 🔧 Funkcje pomocnicze
 def save_api_key():
     st.session_state["api_key"] = st.session_state.input_api_key
     os.environ["OPENAI_API_KEY"] = st.session_state.api_key
@@ -53,7 +71,7 @@ def convert_time_to_seconds(time_str):
     except:
         return None
 
-# Logika główna
+# 🧠 Logika główna z Langfuse
 def calculate():
     user_input = st.session_state.user_input
 
@@ -69,17 +87,39 @@ def calculate():
             f"Tekst:\n{user_input}"
         )
 
+        trace = langfuse.trace(name="MaratonTrace", user_id="user-001")
+        span_llm = trace.span(name="OpenAI Chat", input=prompt_template)
+        # ... wywołanie OpenAI ...
+        span_llm.update(output=result)
+        span_llm.end()
+
+        span_pred = trace.span(name="Model Prediction", input=df.to_dict())
+        # ... predykcja ...
+        span_pred.update(output=prediction.to_dict())
+        span_pred.end()
+
+        trace.update(metadata={"source": "streamlit", "version": "1.0"})
+
         try:
+            trace = langfuse.trace(name="MaratonTrace", user_id="user-001")
+
+            # 🔍 Span: OpenAI
+            span_llm = trace.span(name="OpenAI Chat", input=prompt_template)
+
             client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
             response = client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt_template}],
                 model="gpt-4o"
             )
-            result = response.choices[0].message.content
-            data = extract_json(result)
 
+            result = response.choices[0].message.content
+            span_llm.set_output(result)
+            span_llm.end()
+
+            data = extract_json(result)
             if not data:
                 st.error(f"❌ {result}")
+                trace.end()
                 return
 
             brak_danych = []
@@ -92,6 +132,7 @@ def calculate():
 
             if brak_danych:
                 st.error(f"Brakuje danych: {', '.join(brak_danych)}")
+                trace.end()
                 return
             else:
                 st.toast("✅ Wykryto dane: **wiek + płeć + czas 5 km**")
@@ -99,6 +140,7 @@ def calculate():
             czas_5km_total_sec = convert_time_to_seconds(data["czas_5km"])
             if czas_5km_total_sec is None:
                 st.error("Nieprawidłowy format czasu.")
+                trace.end()
                 return
 
             tempo_sec = czas_5km_total_sec / 5
@@ -108,7 +150,12 @@ def calculate():
                 "tempo_sec": tempo_sec
             }])
 
+            # 🔍 Span: PyCaret prediction
+            span_pred = trace.span(name="Model Prediction", input=df.to_dict())
             prediction = predict_model(model, data=df)
+            span_pred.set_output(prediction.to_dict())
+            span_pred.end()
+
             czas = round(prediction["prediction_label"].values[0], 2)
             hours = int(czas // 3600)
             minutes = int((czas % 3600) // 60)
@@ -116,10 +163,12 @@ def calculate():
             formatted_time = f"{hours:02}:{minutes:02}:{seconds:02}"
             st.success(f"⏱️ Przewidywany czas: **{formatted_time}**")
 
+            trace.end()
+
         except Exception as e:
             st.error(f"Wystąpił błąd predykcji: {e}")
 
-# UI i interakcje
+# 🎛️ UI
 if not st.session_state.api_key:
     st.text_input("🔑 Klucz OpenAI API", type="password", key="input_api_key")
     st.button("Zatwierdź", on_click=save_api_key)
@@ -129,8 +178,7 @@ else:
         st.markdown("""
             <h1 style='text-align: center; font-size: 42px; color: #f9fafb;'>ZAPLANUJ SWÓJ 🏃‍♂️ MARATON</h1>
             <hr style='border: 1px solid gray;'/>
-        """, unsafe_allow_html=True
-        )
+        """, unsafe_allow_html=True)
 
     st.markdown("### 💬 Podaj poniżej swoje wyniki:")
 
