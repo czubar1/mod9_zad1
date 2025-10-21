@@ -1,7 +1,9 @@
+numpy
 boto3
-joblib
+pandas
 streamlit
 openai
-joblib
-pandas
+pycaret[full]
+python-dotenv
+langfuse==2.51.4
 scikit-learn
