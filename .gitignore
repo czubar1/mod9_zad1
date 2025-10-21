@@ -1,0 +1,6 @@
+# Pliki środowiskowe
+.env
+*.log
+
+# Streamlit
+.streamlit/secrets.toml

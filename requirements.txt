@@ -1,0 +1,9 @@
+numpy
+boto3
+pandas
+streamlit
+openai
+pycaret[full]
+python-dotenv
+langfuse==2.51.4
+scikit-learn
