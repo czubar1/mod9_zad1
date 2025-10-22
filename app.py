@@ -9,13 +9,11 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import requests
 from langfuse import Langfuse
+
 langfuse = Langfuse()
 
 # 🌍 Załaduj zmienne środowiskowe
 # load_dotenv()
-
-# 🔍 Inicjalizacja Langfuse
-# langfuse = Langfuse()
 
 # 📥 Pobierz model z DigitalOcean Spaces
 url = "https://9-mod-1-zad.fra1.digitaloceanspaces.com/model_halfmaraton.pkl"
@@ -87,19 +85,6 @@ def calculate():
             f"Tekst:\n{user_input}"
         )
 
-        trace = langfuse.trace(name="MaratonTrace", user_id="user-001")
-        span_llm = trace.span(name="OpenAI Chat", input=prompt_template)
-        # ... wywołanie OpenAI ...
-        span_llm.update(output=result)
-        span_llm.end()
-
-        span_pred = trace.span(name="Model Prediction", input=df.to_dict())
-        # ... predykcja ...
-        span_pred.update(output=prediction.to_dict())
-        span_pred.end()
-
-        trace.update(metadata={"source": "streamlit", "version": "1.0"})
-
         try:
             trace = langfuse.trace(name="MaratonTrace", user_id="user-001")
 
@@ -113,13 +98,13 @@ def calculate():
             )
 
             result = response.choices[0].message.content
-            span_llm.set_output(result)
+            span_llm.update(output=result)
             span_llm.end()
 
             data = extract_json(result)
             if not data:
                 st.error(f"❌ {result}")
-                trace.end()
+                # trace.end()
                 return
 
             brak_danych = []
@@ -132,7 +117,7 @@ def calculate():
 
             if brak_danych:
                 st.error(f"Brakuje danych: {', '.join(brak_danych)}")
-                trace.end()
+                # trace.end()
                 return
             else:
                 st.toast("✅ Wykryto dane: **wiek + płeć + czas 5 km**")
@@ -140,7 +125,7 @@ def calculate():
             czas_5km_total_sec = convert_time_to_seconds(data["czas_5km"])
             if czas_5km_total_sec is None:
                 st.error("Nieprawidłowy format czasu.")
-                trace.end()
+                # trace.end()
                 return
 
             tempo_sec = czas_5km_total_sec / 5
@@ -150,10 +135,10 @@ def calculate():
                 "tempo_sec": tempo_sec
             }])
 
-            # 🔍 Span: PyCaret prediction
+            # 🔮 Span: Predykcja
             span_pred = trace.span(name="Model Prediction", input=df.to_dict())
             prediction = predict_model(model, data=df)
-            span_pred.set_output(prediction.to_dict())
+            span_pred.update(output=prediction.to_dict())
             span_pred.end()
 
             czas = round(prediction["prediction_label"].values[0], 2)
@@ -163,7 +148,7 @@ def calculate():
             formatted_time = f"{hours:02}:{minutes:02}:{seconds:02}"
             st.success(f"⏱️ Przewidywany czas: **{formatted_time}**")
 
-            trace.end()
+            # trace.end()
 
         except Exception as e:
             st.error(f"Wystąpił błąd predykcji: {e}")
